@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OverSeer: Multi-Agent World Models Beyond What Agents See</title>
+<meta name="description" content="OverSeer is a multi-agent video world model that augments the agents' egocentric streams with fixed auxiliary camera views, compressed by a δ-VAE, for worlds that stay consistent over time and across players.">
+<link rel="stylesheet" href="static/css/style.css">
+<style>
+.hero .authors { color: var(--ink); margin-bottom: 0.25em; line-height: 1.6; }
+.hero .authors .author { white-space: nowrap; }
+.hero .authors sup, .hero .affiliations sup { font-size: 0.7em; color: var(--ink-2); margin-left: 0.05em; }
+.hero .affiliations { color: var(--ink-2); font-size: 0.95rem; margin-bottom: 0.15em; }
+.hero .affiliations span + span { margin-left: 1.1em; }
+.hero .note { color: var(--ink-2); font-size: 0.85rem; margin-bottom: 0; }
+.hero .links { margin: 1.3rem 0 1.8rem; }
+.button .arxiv { width: auto; height: 0.95em; }
+.button .hf { width: 1.25em; height: 1.25em; }
+.button[aria-disabled="true"] { opacity: 0.55; pointer-events: none; }
+</style>
+<link rel="icon" href="static/images/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<nav class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="#top">OverSeer</a>
+    <div class="nav-links">
+      <a href="#method">Method</a>
+      <a href="#rollouts">Rollouts</a>
+      <a href="#comparison">Comparison</a>
+      <a href="#consistency">Consistency</a>
+      <a href="#codes">δ-VAE</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ============================================================ hero -->
+<div class="container hero" id="top">
+  <p class="eyebrow">Multi-agent world models</p>
+  <h1 class="title"><span class="system">OverSeer:</span> Multi-Agent World Models Beyond What Agents See</h1>
+  <p class="authors">
+    <span class="author">Runjia Li<sup>1,2</sup></span>,
+    <span class="author">Kam Woh Ng<sup>2</sup></span>,
+    <span class="author">Minghao Chen<sup>1,2</sup></span>,
+    <span class="author">Junlin Han<sup>1,2</sup></span>,
+    <span class="author">Jianyuan Wang<sup>1,2</sup></span>,
+    <span class="author">Zhaochong An<sup>2</sup></span>,
+    <span class="author">Juan-Manuel Perez-Rua<sup>2</sup></span>,
+    <span class="author">Andrea Vedaldi<sup>1,2,†</sup></span>,
+    <span class="author">Shikun Liu<sup>2,†</sup></span>
+  </p>
+  <p class="affiliations"><span><sup>1</sup>University of Oxford</span><span><sup>2</sup>Meta</span></p>
+  <p class="note"><sup>†</sup>Equal supervision</p>
+  <div class="links">
+    <a class="button" aria-disabled="true" title="arXiv link coming soon"><svg class="arxiv" aria-hidden="true" focusable="false" id="primary_logo_-_single_color_-_white" data-name="primary logo - single color - white" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 246.978 110.119"><path d="M492.976,269.5l24.36-29.89c1.492-1.989,2.2-3.03,1.492-4.723a5.142,5.142,0,0,0-4.481-3.161h0a4.024,4.024,0,0,0-3.008,1.108L485.2,261.094Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M526.273,325.341,493.91,287.058l-.972,1.033-7.789-9.214-7.743-9.357-4.695,5.076a4.769,4.769,0,0,0,.015,6.53L520.512,332.2a3.913,3.913,0,0,0,3.137,1.192,4.394,4.394,0,0,0,4.027-2.818C528.4,328.844,527.6,327.133,526.273,325.341Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M479.215,288.087l6.052,6.485L458.714,322.7a2.98,2.98,0,0,1-2.275,1.194,3.449,3.449,0,0,1-3.241-2.144c-.513-1.231.166-3.15,1.122-4.168l.023-.024.021-.026,24.851-29.448m-.047-1.882-25.76,30.524c-1.286,1.372-2.084,3.777-1.365,5.5a4.705,4.705,0,0,0,4.4,2.914,4.191,4.191,0,0,0,3.161-1.563l27.382-29.007-7.814-8.372Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M427.571,255.154c1.859,0,3.1,1.24,3.985,3.453,1.062-2.213,2.568-3.453,4.694-3.453h14.878a4.062,4.062,0,0,1,4.074,4.074v7.828c0,2.656-1.327,4.074-4.074,4.074-2.656,0-4.074-1.418-4.074-4.074V263.3H436.515a2.411,2.411,0,0,0-2.656,2.745v27.188h10.007c2.658,0,4.074,1.329,4.074,4.074s-1.416,4.074-4.074,4.074h-26.39c-2.659,0-3.986-1.328-3.986-4.074s1.327-4.074,3.986-4.074h8.236V263.3h-7.263c-2.656,0-3.985-1.329-3.985-4.074,0-2.658,1.329-4.074,3.985-4.074Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M539.233,255.154c2.656,0,4.074,1.416,4.074,4.074v34.007h10.1c2.746,0,4.074,1.329,4.074,4.074s-1.328,4.074-4.074,4.074H524.8c-2.656,0-4.074-1.328-4.074-4.074s1.418-4.074,4.074-4.074h10.362V263.3h-8.533c-2.744,0-4.073-1.329-4.073-4.074,0-2.658,1.329-4.074,4.073-4.074Zm4.22-17.615a5.859,5.859,0,1,1-5.819-5.819A5.9,5.9,0,0,1,543.453,237.539Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M605.143,259.228a4.589,4.589,0,0,1-.267,1.594L590,298.9a3.722,3.722,0,0,1-3.721,2.48h-5.933a3.689,3.689,0,0,1-3.808-2.48l-15.055-38.081a3.23,3.23,0,0,1-.355-1.594,4.084,4.084,0,0,1,4.164-4.074,3.8,3.8,0,0,1,3.718,2.656l14.348,36.134,13.9-36.134a3.8,3.8,0,0,1,3.72-2.656A4.084,4.084,0,0,1,605.143,259.228Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M390.61,255.154c5.018,0,8.206,3.312,8.206,8.4v37.831H363.308a4.813,4.813,0,0,1-5.143-4.929V283.427a8.256,8.256,0,0,1,7-8.148l25.507-3.572v-8.4H362.306a4.014,4.014,0,0,1-4.141-4.074c0-2.87,2.143-4.074,4.355-4.074Zm.059,38.081V279.942l-24.354,3.4v9.9Z" transform="translate(-358.165 -223.27)" fill="currentColor"/><path d="M448.538,224.52h.077c1,.024,2.236,1.245,2.589,1.669l.023.028.024.026,46.664,50.433a3.173,3.173,0,0,1-.034,4.336l-4.893,5.2-6.876-8.134L446.652,230.4c-1.508-2.166-1.617-2.836-1.191-3.858a3.353,3.353,0,0,1,3.077-2.02m0-1.25a4.606,4.606,0,0,0-4.231,2.789c-.705,1.692-.2,2.88,1.349,5.1l39.493,47.722,7.789,9.214,5.853-6.221a4.417,4.417,0,0,0,.042-6.042L452.169,225.4s-1.713-2.08-3.524-2.124Z" transform="translate(-358.165 -223.27)" fill="currentColor"/></svg>Paper (coming soon)</a>
+    <a class="button ghost" href="https://huggingface.co/datasets/liguang0115/overseer-minecraft"><img class="hf" src="static/images/hf-logo.svg" alt="">Minecraft dataset</a>
+    <a class="button ghost" href="https://huggingface.co/datasets/liguang0115/overseer-doom"><img class="hf" src="static/images/hf-logo.svg" alt="">Doom dataset</a>
+  </div>
+  <p class="abstract">A multi-agent world model that renders each player's view <b>together with a few fixed auxiliary cameras</b>. Because the cameras never move, they anchor the shared world: places stay where they were when a player returns, and what one player does is seen by the others. A δ-VAE codes each auxiliary stream as one reference frame plus a compact residual, so an extra camera costs an 8 × smaller share of tokens than a player stream.</p>
+  <div class="teaser">
+    <video muted loop playsinline autoplay preload="auto" poster="static/images/posters/teaser.jpg" src="static/videos/teaser.mp4"></video>
+  </div>
+  <p class="caption teaser-note"><b>Illustration of the setting, rendered by the game engine — not model output.</b> Two agents, six fixed cameras, one shared world. OverSeer predicts the agents' own views (bottom) jointly with the auxiliary views (right).</p>
+</div>
+
+<!-- ============================================================ introduction -->
+<div class="container main first" id="idea">
+  <h1>Idea</h1>
+  <p class="text">Egocentric streams are partial and entangled, so a multi-agent world model built on them alone drifts: revisited places change and the players disagree about each other. OverSeer adds fixed auxiliary cameras and predicts all streams together. A stationary view changes only when the world changes, so it is a persistent shared reference, and it compresses well: the δ-VAE keeps one reference latent per camera and a small residual for what moved (108 tokens per latent frame instead of 864).</p>
+</div>
+
+<!-- ============================================================ method -->
+<div class="container main wide" id="method">
+  <h1>How it works</h1>
+  <p class="text">One frame of every stream and the recorded actions go in; the model predicts all eight streams together, for thirty seconds. Everything from here on is what the model produces, at the resolution it produces it.</p>
+  <img class="figure plain" src="static/images/method.png" srcset="static/images/method-1200.png 1200w, static/images/method-2000.png 2000w, static/images/method.png 2931w" sizes="(max-width: 600px) calc(100vw - 32px), 90vw" width="2931" height="1194" alt="Method figure. Stage 1, training the δ-VAE: the encoder takes an auxiliary view's reference latent (t = 0) and later latents and keeps only a residual code; the decoder repeats the reference latent, adds a learnable positional embedding and reconstructs the later latents from it and the residual code. Stage 2, training OverSeer: the action text embedding, the agents' reference and noised latents, the auxiliary views' reference latent, their residual codes and the reference Plücker rays are concatenated into one sequence for a diffusion transformer (cross-attention to the action, self-attention, camera-ray modulation), which reconstructs the agent view latents and the auxiliary view latents together.">
+</div>
+
+<!-- ============================================================ rollouts -->
+<div class="container main wide" id="rollouts">
+  <h1>OverSeer rollouts</h1>
+  <p class="text">Every frame is generated from the first frame of each stream and the recorded actions. <span class="pill-1">Agent 1</span> <span class="pill-2">Agent 2</span> above, the numbered auxiliary cameras on the band below. The panel on each agent view is the action the model receives at that frame: the movement keys, the look direction (the dot in the ring) and the buttons, lit while active. In Doom the fire chip follows the shot the clip itself shows, read off the muzzle flash. Each domain shows a few episodes; <b>More samples</b> opens the rest, picked by the benchmark's own quality ranking.</p>
+
+  <h2>Minecraft</h2>
+  <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-1-agents.jpg" data-src="static/videos/rollouts/minecraft-1-agents.mp4" data-group="card-minecraft-1"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-1-aux.jpg" data-src="static/videos/rollouts/minecraft-1-aux.mp4" data-group="card-minecraft-1"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-2-agents.jpg" data-src="static/videos/rollouts/minecraft-2-agents.mp4" data-group="card-minecraft-2"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-2-aux.jpg" data-src="static/videos/rollouts/minecraft-2-aux.mp4" data-group="card-minecraft-2"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-3-agents.jpg" data-src="static/videos/rollouts/minecraft-3-agents.mp4" data-group="card-minecraft-3"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-3-aux.jpg" data-src="static/videos/rollouts/minecraft-3-aux.mp4" data-group="card-minecraft-3"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-4-agents.jpg" data-src="static/videos/rollouts/minecraft-4-agents.mp4" data-group="card-minecraft-4"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-4-aux.jpg" data-src="static/videos/rollouts/minecraft-4-aux.mp4" data-group="card-minecraft-4"></video></div>
+</figure>
+  </div>
+  <div class="more" id="more-minecraft" hidden>
+    <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-5-agents.jpg" data-src="static/videos/rollouts/minecraft-5-agents.mp4" data-group="card-minecraft-5"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-5-aux.jpg" data-src="static/videos/rollouts/minecraft-5-aux.mp4" data-group="card-minecraft-5"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-6-agents.jpg" data-src="static/videos/rollouts/minecraft-6-agents.mp4" data-group="card-minecraft-6"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-6-aux.jpg" data-src="static/videos/rollouts/minecraft-6-aux.mp4" data-group="card-minecraft-6"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-7-agents.jpg" data-src="static/videos/rollouts/minecraft-7-agents.mp4" data-group="card-minecraft-7"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-7-aux.jpg" data-src="static/videos/rollouts/minecraft-7-aux.mp4" data-group="card-minecraft-7"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-8-agents.jpg" data-src="static/videos/rollouts/minecraft-8-agents.mp4" data-group="card-minecraft-8"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-8-aux.jpg" data-src="static/videos/rollouts/minecraft-8-aux.mp4" data-group="card-minecraft-8"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-9-agents.jpg" data-src="static/videos/rollouts/minecraft-9-agents.mp4" data-group="card-minecraft-9"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/minecraft-9-aux.jpg" data-src="static/videos/rollouts/minecraft-9-aux.mp4" data-group="card-minecraft-9"></video></div>
+</figure>
+    </div>
+  </div>
+  <button class="button ghost more-button" data-more="more-minecraft" aria-expanded="false">Show 5 more Minecraft samples</button>
+
+  <h2>Doom</h2>
+  <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-1-agents.jpg" data-src="static/videos/rollouts/doom-1-agents.mp4" data-group="card-doom-1"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-1-aux.jpg" data-src="static/videos/rollouts/doom-1-aux.mp4" data-group="card-doom-1"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-2-agents.jpg" data-src="static/videos/rollouts/doom-2-agents.mp4" data-group="card-doom-2"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-2-aux.jpg" data-src="static/videos/rollouts/doom-2-aux.mp4" data-group="card-doom-2"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-3-agents.jpg" data-src="static/videos/rollouts/doom-3-agents.mp4" data-group="card-doom-3"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-3-aux.jpg" data-src="static/videos/rollouts/doom-3-aux.mp4" data-group="card-doom-3"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-4-agents.jpg" data-src="static/videos/rollouts/doom-4-agents.mp4" data-group="card-doom-4"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-4-aux.jpg" data-src="static/videos/rollouts/doom-4-aux.mp4" data-group="card-doom-4"></video></div>
+</figure>
+  </div>
+  <div class="more" id="more-doom" hidden>
+    <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-5-agents.jpg" data-src="static/videos/rollouts/doom-5-agents.mp4" data-group="card-doom-5"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-5-aux.jpg" data-src="static/videos/rollouts/doom-5-aux.mp4" data-group="card-doom-5"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-6-agents.jpg" data-src="static/videos/rollouts/doom-6-agents.mp4" data-group="card-doom-6"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/doom-6-aux.jpg" data-src="static/videos/rollouts/doom-6-aux.mp4" data-group="card-doom-6"></video></div>
+</figure>
+    </div>
+  </div>
+  <button class="button ghost more-button" data-more="more-doom" aria-expanded="false">Show 2 more Doom samples</button>
+
+  <h2>Real multi-camera capture</h2>
+  <p class="text">Two head-mounted cameras and six fixed cameras in a studio. Here the panel is read off the head-mounted camera's poses: the walking direction in the wearer's own frame as the keys, the head turn as the look ring.</p>
+  <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-1-agents.jpg" data-src="static/videos/rollouts/capture-1-agents.mp4" data-group="card-capture-1"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-1-aux.jpg" data-src="static/videos/rollouts/capture-1-aux.mp4" data-group="card-capture-1"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-2-agents.jpg" data-src="static/videos/rollouts/capture-2-agents.mp4" data-group="card-capture-2"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-2-aux.jpg" data-src="static/videos/rollouts/capture-2-aux.mp4" data-group="card-capture-2"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-3-agents.jpg" data-src="static/videos/rollouts/capture-3-agents.mp4" data-group="card-capture-3"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-3-aux.jpg" data-src="static/videos/rollouts/capture-3-aux.mp4" data-group="card-capture-3"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-4-agents.jpg" data-src="static/videos/rollouts/capture-4-agents.mp4" data-group="card-capture-4"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-4-aux.jpg" data-src="static/videos/rollouts/capture-4-aux.mp4" data-group="card-capture-4"></video></div>
+</figure>
+  </div>
+  <div class="more" id="more-capture" hidden>
+    <div class="grid grid-2">
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-5-agents.jpg" data-src="static/videos/rollouts/capture-5-agents.mp4" data-group="card-capture-5"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-5-aux.jpg" data-src="static/videos/rollouts/capture-5-aux.mp4" data-group="card-capture-5"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-6-agents.jpg" data-src="static/videos/rollouts/capture-6-agents.mp4" data-group="card-capture-6"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-6-aux.jpg" data-src="static/videos/rollouts/capture-6-aux.mp4" data-group="card-capture-6"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-7-agents.jpg" data-src="static/videos/rollouts/capture-7-agents.mp4" data-group="card-capture-7"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-7-aux.jpg" data-src="static/videos/rollouts/capture-7-aux.mp4" data-group="card-capture-7"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-8-agents.jpg" data-src="static/videos/rollouts/capture-8-agents.mp4" data-group="card-capture-8"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-8-aux.jpg" data-src="static/videos/rollouts/capture-8-aux.mp4" data-group="card-capture-8"></video></div>
+</figure>
+<figure class="rollout">
+  <div class="agent-band"><p class="group-head">Agent view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-9-agents.jpg" data-src="static/videos/rollouts/capture-9-agents.mp4" data-group="card-capture-9"></video></div>
+  <div class="aux-band"><p class="group-head aux">Auxiliary view</p>
+  <video class="media plain" data-rate="1.5" muted loop playsinline preload="none" poster="static/images/posters/capture-9-aux.jpg" data-src="static/videos/rollouts/capture-9-aux.mp4" data-group="card-capture-9"></video></div>
+</figure>
+    </div>
+  </div>
+  <button class="button ghost more-button" data-more="more-capture" aria-expanded="false">Show 5 more capture samples</button>
+</div>
+
+<!-- ============================================================ comparison -->
+<div class="container main" id="comparison">
+  <h1>Comparison with baseline models</h1>
+  <p class="text">Scripted tasks that only a consistent world passes: walk apart and reunite, or leave an event and come back to its outcome. Same first frame and actions (the panel) for every system; the columns play in step.</p>
+</div>
+<div class="container wide band" id="comparison-band">
+  <div class="controls">
+  <button class="button ghost" data-action="slower" data-group="campaign" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="campaign" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="campaign" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="campaign" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="campaign">Speed ×1.00</span>
+  <span class="spacer"></span>
+  <label for="task-select">Task</label>
+  <select id="task-select" class="select" data-switch="campaign">
+    <option value="reuniteStartEval" data-aux="static/videos/comparison/reuniteStartEval-aux.mp4" data-aux-poster="static/images/posters/reuniteStartEval-aux.jpg" data-truth="static/videos/comparison/reuniteStartEval-truth.mp4" data-truth-poster="static/images/posters/reuniteStartEval-truth.jpg" data-ours="static/videos/comparison/reuniteStartEval-ours.mp4" data-ours-poster="static/images/posters/reuniteStartEval-ours.jpg" data-solaris="static/videos/comparison/reuniteStartEval-solaris.mp4" data-solaris-poster="static/images/posters/reuniteStartEval-solaris.jpg" data-gammaworld="static/videos/comparison/reuniteStartEval-gammaworld.mp4" data-gammaworld-poster="static/images/posters/reuniteStartEval-gammaworld.jpg" data-caption="The two agents start side by side, walk apart and return. At the end each has to see the other again where it left it." selected>Reunite at start</option>
+<option value="reuniteFarEval" data-aux="static/videos/comparison/reuniteFarEval-aux.mp4" data-aux-poster="static/images/posters/reuniteFarEval-aux.jpg" data-truth="static/videos/comparison/reuniteFarEval-truth.mp4" data-truth-poster="static/images/posters/reuniteFarEval-truth.jpg" data-ours="static/videos/comparison/reuniteFarEval-ours.mp4" data-ours-poster="static/images/posters/reuniteFarEval-ours.jpg" data-solaris="static/videos/comparison/reuniteFarEval-solaris.mp4" data-solaris-poster="static/images/posters/reuniteFarEval-solaris.jpg" data-gammaworld="static/videos/comparison/reuniteFarEval-gammaworld.mp4" data-gammaworld-poster="static/images/posters/reuniteFarEval-gammaworld.jpg" data-caption="The agents start out of each other's sight and walk toward the same place; the question is whether the partner comes into view at the end.">Reunite far</option>
+<option value="dynamicCreeperEval" data-aux="static/videos/comparison/dynamicCreeperEval-aux.mp4" data-aux-poster="static/images/posters/dynamicCreeperEval-aux.jpg" data-truth="static/videos/comparison/dynamicCreeperEval-truth.mp4" data-truth-poster="static/images/posters/dynamicCreeperEval-truth.jpg" data-ours="static/videos/comparison/dynamicCreeperEval-ours.mp4" data-ours-poster="static/images/posters/dynamicCreeperEval-ours.jpg" data-solaris="static/videos/comparison/dynamicCreeperEval-solaris.mp4" data-solaris-poster="static/images/posters/dynamicCreeperEval-solaris.jpg" data-gammaworld="static/videos/comparison/dynamicCreeperEval-gammaworld.mp4" data-gammaworld-poster="static/images/posters/dynamicCreeperEval-gammaworld.jpg" data-caption="A creeper standing between the agents explodes early on and leaves a crater. Both agents turn back to the spot later: the crater has to be there.">Creeper explodes</option>
+<option value="dynamicCropsEval" data-aux="static/videos/comparison/dynamicCropsEval-aux.mp4" data-aux-poster="static/images/posters/dynamicCropsEval-aux.jpg" data-truth="static/videos/comparison/dynamicCropsEval-truth.mp4" data-truth-poster="static/images/posters/dynamicCropsEval-truth.jpg" data-ours="static/videos/comparison/dynamicCropsEval-ours.mp4" data-ours-poster="static/images/posters/dynamicCropsEval-ours.jpg" data-solaris="static/videos/comparison/dynamicCropsEval-solaris.mp4" data-solaris-poster="static/images/posters/dynamicCropsEval-solaris.jpg" data-gammaworld="static/videos/comparison/dynamicCropsEval-gammaworld.mp4" data-gammaworld-poster="static/images/posters/dynamicCropsEval-gammaworld.jpg" data-caption="Crops planted at the start have grown by the time the agents look back at them.">Crops grow</option>
+  </select>
+  <button class="button ghost more-button aux-button" data-more="aux-campaign" data-aux-for="campaign" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-4">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-truth.jpg" data-src="static/videos/comparison/reuniteStartEval-truth.mp4" data-group="campaign" data-slot="truth"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-ours.jpg" data-src="static/videos/comparison/reuniteStartEval-ours.mp4" data-group="campaign" data-slot="ours"></video></figure>
+<figure><p class="col-head">Solaris</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-solaris.jpg" data-src="static/videos/comparison/reuniteStartEval-solaris.mp4" data-group="campaign" data-slot="solaris"></video></figure>
+<figure><p class="col-head">γ-World</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-gammaworld.jpg" data-src="static/videos/comparison/reuniteStartEval-gammaworld.mp4" data-group="campaign" data-slot="gammaworld"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem"><span data-caption-for="campaign">The two agents start side by side, walk apart and return. At the end each has to see the other again where it left it.</span></p>
+<div class="more aux-panel" id="aux-campaign" hidden>
+  <p class="col-head ours">OverSeer · the six auxiliary views it generates for the same episode</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/dynamicCreeperEval-aux.jpg" data-src="static/videos/comparison/dynamicCreeperEval-aux.mp4" data-group="campaign" data-slot="aux"></video></div>
+</div>
+</div>
+
+<!-- ============================================================ consistency over time -->
+<div class="container main" id="consistency">
+  <h1>Consistency over time</h1>
+  <p class="text">The same tasks in both domains, and the same question: when a place, an event or the partner comes back into view, is it the one that was there before? Every block has the same three columns, and the middle one is the world <b>without the auxiliary views</b>.</p>
+
+  <h2>Reunite at start · Doom</h2>
+  <p class="text">The marines walk out and come back to the pose they started in, so the last frames revisit the first.</p>
+</div>
+<div class="container wide band">
+<div class="controls">
+  <button class="button ghost" data-action="slower" data-group="doomStart" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="doomStart" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="doomStart" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="doomStart" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="doomStart">Speed ×1.00</span>
+  <span class="spacer"></span>  <label for="doom-start-select">Map</label>
+  <select id="doom-start-select" class="select" data-switch="doomStart">
+    <option value="start-1" data-aux="static/videos/doom-modes/start-1-aux.mp4" data-aux-poster="static/images/posters/start-1-aux.jpg" data-truth="static/videos/doom-modes/start-1-truth.mp4" data-truth-poster="static/images/posters/start-1-truth.jpg" data-egoonly="static/videos/doom-modes/start-1-egoonly.mp4" data-egoonly-poster="static/images/posters/start-1-egoonly.jpg" data-ours="static/videos/doom-modes/start-1-ours.mp4" data-ours-poster="static/images/posters/start-1-ours.jpg" data-caption="E4M3. Both marines walk out and back to their starting pose, so the last frame revisits the first: the same room for OverSeer, a rebuilt one for the ego-only run." selected>E4M3</option>
+<option value="start-2" data-aux="static/videos/doom-modes/start-2-aux.mp4" data-aux-poster="static/images/posters/start-2-aux.jpg" data-truth="static/videos/doom-modes/start-2-truth.mp4" data-truth-poster="static/images/posters/start-2-truth.jpg" data-egoonly="static/videos/doom-modes/start-2-egoonly.mp4" data-egoonly-poster="static/images/posters/start-2-egoonly.jpg" data-ours="static/videos/doom-modes/start-2-ours.mp4" data-ours-poster="static/images/posters/start-2-ours.jpg" data-caption="MAP30. The same task in a second arena.">MAP30</option>
+  </select>
+  <button class="button ghost more-button aux-button" data-more="aux-doomStart" data-aux-for="doomStart" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-3">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/start-1-truth.jpg" data-src="static/videos/doom-modes/start-1-truth.mp4" data-group="doomStart" data-slot="truth"></video></figure>
+<figure><p class="col-head">Ego only</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/start-1-egoonly.jpg" data-src="static/videos/doom-modes/start-1-egoonly.mp4" data-group="doomStart" data-slot="egoonly"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/start-1-ours.jpg" data-src="static/videos/doom-modes/start-1-ours.mp4" data-group="doomStart" data-slot="ours"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem"><span data-caption-for="doomStart">E4M3. Both marines walk out and back to their starting pose, so the last frame revisits the first: the same room for OverSeer, a rebuilt one for the ego-only run.</span></p>
+<div class="more aux-panel" id="aux-doomStart" hidden>
+  <p class="col-head ours">OverSeer · the eight auxiliary views of the same world, rendered like the column above</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/start-1-aux.jpg" data-src="static/videos/doom-modes/start-1-aux.mp4" data-group="doomStart" data-slot="aux"></video></div>
+</div>
+</div>
+
+<div class="container main sub">
+  <h2>Reunite far · Doom</h2>
+  <p class="text">The marines start out of sight of each other and walk to a meeting point, where the partner has to be.</p>
+</div>
+<div class="container wide band">
+<div class="controls">
+  <button class="button ghost" data-action="slower" data-group="doomFar" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="doomFar" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="doomFar" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="doomFar" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="doomFar">Speed ×1.00</span>
+  <span class="spacer"></span>
+  <button class="button ghost more-button aux-button" data-more="aux-doomFar" data-aux-for="doomFar" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-3">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/far-3-truth.jpg" data-src="static/videos/doom-modes/far-3-truth.mp4" data-group="doomFar" data-slot="truth"></video></figure>
+<figure><p class="col-head">Ego only</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/far-3-egoonly.jpg" data-src="static/videos/doom-modes/far-3-egoonly.mp4" data-group="doomFar" data-slot="egoonly"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/far-3-ours.jpg" data-src="static/videos/doom-modes/far-3-ours.mp4" data-group="doomFar" data-slot="ours"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem">E2M7. Only the run that keeps the auxiliary views reaches the partner; the ego-only world beyond the first frame is rebuilt and the meeting never happens.</p>
+<div class="more aux-panel" id="aux-doomFar" hidden>
+  <p class="col-head ours">OverSeer · the eight auxiliary views of the same world, rendered like the column above</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/far-3-aux.jpg" data-src="static/videos/doom-modes/far-3-aux.mp4" data-group="doomFar" data-slot="aux"></video></div>
+</div>
+</div>
+
+<div class="container main sub">
+  <h2>Reunite at start · Minecraft</h2>
+  <p class="text">The two agents start side by side, walk apart and return; at the end each has to see the other where it was left.</p>
+</div>
+<div class="container wide band">
+<div class="controls">
+  <button class="button ghost" data-action="slower" data-group="mcStart" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="mcStart" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="mcStart" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="mcStart" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="mcStart">Speed ×1.00</span>
+  <span class="spacer"></span>
+  <button class="button ghost more-button aux-button" data-more="aux-mcStart" data-aux-for="mcStart" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-3">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-full-truth.jpg" data-src="static/videos/consistency/reuniteStartEval-full-truth.mp4" data-group="mcStart" data-slot="truth"></video></figure>
+<figure><p class="col-head">Ego only</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-full-egoonly.jpg" data-src="static/videos/consistency/reuniteStartEval-full-egoonly.mp4" data-group="mcStart" data-slot="egoonly"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-full-ours.jpg" data-src="static/videos/consistency/reuniteStartEval-full-ours.mp4" data-group="mcStart" data-slot="ours"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem">The partner is back in view for OverSeer at the end of the walk; the ego-only run has lost it.</p>
+<div class="more aux-panel" id="aux-mcStart" hidden>
+  <p class="col-head ours">OverSeer · the six auxiliary views it generates for the same episode</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/reuniteStartEval-full-aux.jpg" data-src="static/videos/consistency/reuniteStartEval-full-aux.mp4" data-group="mcStart" data-slot="aux"></video></div>
+</div>
+</div>
+
+<div class="container main sub">
+  <h2>Reunite far · Minecraft</h2>
+  <p class="text">The agents start out of each other's sight and walk to the same place, which only a shared world brings them to.</p>
+</div>
+<div class="container wide band">
+<div class="controls">
+  <button class="button ghost" data-action="slower" data-group="mcFar" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="mcFar" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="mcFar" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="mcFar" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="mcFar">Speed ×1.00</span>
+  <span class="spacer"></span>
+  <button class="button ghost more-button aux-button" data-more="aux-mcFar" data-aux-for="mcFar" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-3">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteFarEval-full-truth.jpg" data-src="static/videos/consistency/reuniteFarEval-full-truth.mp4" data-group="mcFar" data-slot="truth"></video></figure>
+<figure><p class="col-head">Ego only</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteFarEval-full-egoonly.jpg" data-src="static/videos/consistency/reuniteFarEval-full-egoonly.mp4" data-group="mcFar" data-slot="egoonly"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/reuniteFarEval-full-ours.jpg" data-src="static/videos/consistency/reuniteFarEval-full-ours.mp4" data-group="mcFar" data-slot="ours"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem">The rendezvous at the end of the clip: the partner is there for OverSeer, absent without the auxiliary views.</p>
+<div class="more aux-panel" id="aux-mcFar" hidden>
+  <p class="col-head ours">OverSeer · the six auxiliary views it generates for the same episode</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/reuniteFarEval-full-aux.jpg" data-src="static/videos/consistency/reuniteFarEval-full-aux.mp4" data-group="mcFar" data-slot="aux"></video></div>
+</div>
+</div>
+
+<div class="container main sub">
+  <h2>Dynamic event · Minecraft</h2>
+  <p class="text">Something happens between the agents at the start, they walk away, and the outcome has to be there when they look back.</p>
+</div>
+<div class="container wide band">
+<div class="controls">
+  <button class="button ghost" data-action="slower" data-group="mcEvent" title="Slower"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M11 19V5l-9 7zM21 19V5l-9 7z"/></svg></button>
+  <button class="button ghost" data-action="toggle" data-group="mcEvent" title="Play / pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h4v14H6zM14 5h4v14h-4z"/></svg></button>
+  <button class="button ghost" data-action="faster" data-group="mcEvent" title="Faster"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M13 5v14l9-7zM3 5v14l9-7z"/></svg></button>
+  <button class="button ghost" data-action="restart" data-group="mcEvent" title="Restart"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v5h5"/></svg></button>
+  <span class="speed" data-speed-for="mcEvent">Speed ×1.00</span>
+  <span class="spacer"></span>  <label for="event-select">Event</label>
+  <select id="event-select" class="select" data-switch="mcEvent">
+    <option value="dynamicCreeperEval" data-aux="static/videos/consistency/dynamicCreeperEval-full-aux.mp4" data-aux-poster="static/images/posters/dynamicCreeperEval-full-aux.jpg" data-truth="static/videos/consistency/dynamicCreeperEval-full-truth.mp4" data-truth-poster="static/images/posters/dynamicCreeperEval-full-truth.jpg" data-egoonly="static/videos/consistency/dynamicCreeperEval-full-egoonly.mp4" data-egoonly-poster="static/images/posters/dynamicCreeperEval-full-egoonly.jpg" data-ours="static/videos/consistency/dynamicCreeperEval-full-ours.mp4" data-ours-poster="static/images/posters/dynamicCreeperEval-full-ours.jpg" data-caption="A creeper standing between the agents explodes early on and leaves a crater; both agents walk away and look back at the spot." selected>Creeper explodes</option>
+<option value="dynamicCropsEval" data-aux="static/videos/consistency/dynamicCropsEval-full-aux.mp4" data-aux-poster="static/images/posters/dynamicCropsEval-full-aux.jpg" data-truth="static/videos/consistency/dynamicCropsEval-full-truth.mp4" data-truth-poster="static/images/posters/dynamicCropsEval-full-truth.jpg" data-egoonly="static/videos/consistency/dynamicCropsEval-full-egoonly.mp4" data-egoonly-poster="static/images/posters/dynamicCropsEval-full-egoonly.jpg" data-ours="static/videos/consistency/dynamicCropsEval-full-ours.mp4" data-ours-poster="static/images/posters/dynamicCropsEval-full-ours.jpg" data-caption="Crops planted at the start have grown into wheat by the time the agents look back at the field.">Crops grow</option>
+  </select>
+  <button class="button ghost more-button aux-button" data-more="aux-mcEvent" data-aux-for="mcEvent" data-label="Show OverSeer's auxiliary views" data-open-label="Hide OverSeer's auxiliary views" data-off-label="No auxiliary views for this example" aria-expanded="false">Show OverSeer's auxiliary views</button>
+</div>
+<div class="grid grid-3">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/dynamicCreeperEval-full-truth.jpg" data-src="static/videos/consistency/dynamicCreeperEval-full-truth.mp4" data-group="mcEvent" data-slot="truth"></video></figure>
+<figure><p class="col-head">Ego only</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/dynamicCreeperEval-full-egoonly.jpg" data-src="static/videos/consistency/dynamicCreeperEval-full-egoonly.mp4" data-group="mcEvent" data-slot="egoonly"></video></figure>
+<figure class="ours"><p class="col-head ours">OverSeer</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/dynamicCreeperEval-full-ours.jpg" data-src="static/videos/consistency/dynamicCreeperEval-full-ours.mp4" data-group="mcEvent" data-slot="ours"></video></figure>
+</div>
+<p class="caption" style="margin-top:1rem"><span data-caption-for="mcEvent">A creeper standing between the agents explodes early on and leaves a crater; both agents walk away and look back at the spot.</span></p>
+<div class="more aux-panel" id="aux-mcEvent" hidden>
+  <p class="col-head ours">OverSeer · the six auxiliary views it generates for the same episode</p>
+  <div class="aux-band"><video class="media plain" muted loop playsinline preload="none" poster="static/images/posters/dynamicCreeperEval-full-aux.jpg" data-src="static/videos/consistency/dynamicCreeperEval-full-aux.mp4" data-group="mcEvent" data-slot="aux"></video></div>
+</div>
+</div>
+
+<!-- ============================================================ delta-VAE -->
+<div class="container main wide" id="codes">
+  <h1>What the δ-VAE codes carry</h1>
+  <p class="text">The δ-VAE stores each auxiliary camera as its first frame (the reference latent) plus a small residual code per later frame: 108 tokens per latent frame instead of 864. The scene lives in the reference; the code carries what changes.</p>
+
+  <h2>Reconstruction with the clip's own code</h2>
+  <p class="text">Decoding the reference with the clip's own code gives the clip back. The scene stays as it was, and everything that moves (monsters, players, animals, lava, fire) comes from the code.</p>
+  <div class="rows">
+    <div><p class="row-label"><b>Doom</b></p><div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-1-truth.jpg" data-src="static/videos/codes/doom-1-truth.mp4" data-group="codes-doom-1"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-1-recon.jpg" data-src="static/videos/codes/doom-1-recon.mp4" data-group="codes-doom-1"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-2-truth.jpg" data-src="static/videos/codes/doom-2-truth.mp4" data-group="codes-doom-2"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-2-recon.jpg" data-src="static/videos/codes/doom-2-recon.mp4" data-group="codes-doom-2"></video></figure>
+</div>
+</div></div>
+    <div><p class="row-label"><b>Minecraft</b></p><div class="rows"><div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-1-truth.jpg" data-src="static/videos/codes/minecraft-1-truth.mp4" data-group="codes-minecraft-1"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-1-recon.jpg" data-src="static/videos/codes/minecraft-1-recon.mp4" data-group="codes-minecraft-1"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-2-truth.jpg" data-src="static/videos/codes/minecraft-2-truth.mp4" data-group="codes-minecraft-2"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-2-recon.jpg" data-src="static/videos/codes/minecraft-2-recon.mp4" data-group="codes-minecraft-2"></video></figure>
+</div>
+</div>
+<div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-3-truth.jpg" data-src="static/videos/codes/minecraft-3-truth.mp4" data-group="codes-minecraft-3"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-3-recon.jpg" data-src="static/videos/codes/minecraft-3-recon.mp4" data-group="codes-minecraft-3"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-4-truth.jpg" data-src="static/videos/codes/minecraft-4-truth.mp4" data-group="codes-minecraft-4"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-4-recon.jpg" data-src="static/videos/codes/minecraft-4-recon.mp4" data-group="codes-minecraft-4"></video></figure>
+</div>
+</div></div></div>
+  </div>
+  <div class="more" id="more-codes" hidden>
+    <div class="rows">
+      <div><p class="row-label"><b>Doom</b></p><div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-3-truth.jpg" data-src="static/videos/codes/doom-3-truth.mp4" data-group="codes-doom-3"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-3-recon.jpg" data-src="static/videos/codes/doom-3-recon.mp4" data-group="codes-doom-3"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-4-truth.jpg" data-src="static/videos/codes/doom-4-truth.mp4" data-group="codes-doom-4"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/doom-4-recon.jpg" data-src="static/videos/codes/doom-4-recon.mp4" data-group="codes-doom-4"></video></figure>
+</div>
+</div></div>
+      <div><p class="row-label"><b>Minecraft</b></p><div class="rows"><div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-5-truth.jpg" data-src="static/videos/codes/minecraft-5-truth.mp4" data-group="codes-minecraft-5"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-5-recon.jpg" data-src="static/videos/codes/minecraft-5-recon.mp4" data-group="codes-minecraft-5"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-6-truth.jpg" data-src="static/videos/codes/minecraft-6-truth.mp4" data-group="codes-minecraft-6"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-6-recon.jpg" data-src="static/videos/codes/minecraft-6-recon.mp4" data-group="codes-minecraft-6"></video></figure>
+</div>
+</div>
+<div class="grid pairs">
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-7-truth.jpg" data-src="static/videos/codes/minecraft-7-truth.mp4" data-group="codes-minecraft-7"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-7-recon.jpg" data-src="static/videos/codes/minecraft-7-recon.mp4" data-group="codes-minecraft-7"></video></figure>
+</div>
+<div class="grid pair">
+<figure><p class="col-head">Ground truth</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-8-truth.jpg" data-src="static/videos/codes/minecraft-8-truth.mp4" data-group="codes-minecraft-8"></video></figure>
+<figure class="ours"><p class="col-head ours">Reconstruction</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/minecraft-8-recon.jpg" data-src="static/videos/codes/minecraft-8-recon.mp4" data-group="codes-minecraft-8"></video></figure>
+</div>
+</div></div></div>
+    </div>
+  </div>
+  <button class="button ghost more-button" data-more="more-codes" aria-expanded="false">Show 6 more reconstructions</button>
+
+  <h2>Transfer: another clip's code</h2>
+  <p class="text">Decode a host camera's reference frame with a <em>donor</em> clip's residual code: the donor's mover appears in the host scene, the scene itself is untouched. The control decodes the same reference with the host's own code.</p>
+  <div class="rows">
+    <div><p class="row-label"><b>Doom</b></p><div class="grid grid-3"><figure><p class="col-head">Donor · code source</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/1-donor.jpg" data-src="static/videos/transfer/1-donor.mp4" data-group="transfer1"></video></figure>
+<figure><p class="col-head">Control · own code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/1-control.jpg" data-src="static/videos/transfer/1-control.mp4" data-group="transfer1"></video></figure>
+<figure class="ours"><p class="col-head ours">Transfer · donor's code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/1-transfer.jpg" data-src="static/videos/transfer/1-transfer.mp4" data-group="transfer1"></video></figure></div></div>
+    <div><p class="row-label"><b>Doom</b></p><div class="grid grid-3"><figure><p class="col-head">Donor · code source</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/2-donor.jpg" data-src="static/videos/transfer/2-donor.mp4" data-group="transfer2"></video></figure>
+<figure><p class="col-head">Control · own code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/2-control.jpg" data-src="static/videos/transfer/2-control.mp4" data-group="transfer2"></video></figure>
+<figure class="ours"><p class="col-head ours">Transfer · donor's code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/2-transfer.jpg" data-src="static/videos/transfer/2-transfer.mp4" data-group="transfer2"></video></figure></div></div>
+    <div><p class="row-label"><b>Minecraft</b></p><div class="grid grid-3"><figure><p class="col-head">Donor · code source</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/3-donor.jpg" data-src="static/videos/transfer/3-donor.mp4" data-group="transfer3"></video></figure>
+<figure><p class="col-head">Control · own code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/3-control.jpg" data-src="static/videos/transfer/3-control.mp4" data-group="transfer3"></video></figure>
+<figure class="ours"><p class="col-head ours">Transfer · donor's code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/3-transfer.jpg" data-src="static/videos/transfer/3-transfer.mp4" data-group="transfer3"></video></figure></div></div>
+    <div><p class="row-label"><b>Minecraft</b></p><div class="grid grid-3"><figure><p class="col-head">Donor · code source</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/4-donor.jpg" data-src="static/videos/transfer/4-donor.mp4" data-group="transfer4"></video></figure>
+<figure><p class="col-head">Control · own code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/4-control.jpg" data-src="static/videos/transfer/4-control.mp4" data-group="transfer4"></video></figure>
+<figure class="ours"><p class="col-head ours">Transfer · donor's code</p><video class="media" muted loop playsinline preload="none" poster="static/images/posters/4-transfer.jpg" data-src="static/videos/transfer/4-transfer.mp4" data-group="transfer4"></video></figure></div></div>
+  </div>
+</div>
+
+<footer>
+  <p>Videos are generated unless labelled ground truth; research demonstration only.</p>
+  <a href="#top">Back to top ↑</a>
+</footer>
+
+<script src="static/js/main.js"></script>
+</body>
+</html>
