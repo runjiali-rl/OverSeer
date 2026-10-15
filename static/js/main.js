@@ -45,17 +45,30 @@
   // ---- the top bar marks the section in view
   const navLinks = Array.from(document.querySelectorAll(".nav-links a"));
   const targets = navLinks.map((a) => document.querySelector(a.getAttribute("href"))).filter(Boolean);
-  if (targets.length && "IntersectionObserver" in window) {
-    const seen = new Set();
+  const topbar = document.querySelector(".topbar");
+  if (targets.length && topbar) {
+    let pending = false;
     const mark = () => {
-      const first = targets.find((t) => seen.has(t));
-      navLinks.forEach((a) => a.classList.toggle("active", first && a.getAttribute("href") === "#" + first.id));
+      pending = false;
+      const height = topbar.getBoundingClientRect().height;
+      document.documentElement.style.setProperty("--topbar-offset", `${height}px`);
+      // Keep the current chapter selected through long sections and the gaps between them.
+      const current = targets.filter((t) => t.getBoundingClientRect().top <= height + 24).pop();
+      navLinks.forEach((a) => {
+        const active = !!current && a.getAttribute("href") === "#" + current.id;
+        a.classList.toggle("active", active);
+        if (active) a.setAttribute("aria-current", "location");
+        else a.removeAttribute("aria-current");
+      });
     };
-    const spy = new IntersectionObserver((entries) => {
-      entries.forEach((e) => { if (e.isIntersecting) seen.add(e.target); else seen.delete(e.target); });
-      mark();
-    }, { rootMargin: "-20% 0px -70% 0px" });
-    targets.forEach((t) => spy.observe(t));
+    const scheduleMark = () => {
+      if (!pending) { pending = true; requestAnimationFrame(mark); }
+    };
+    window.addEventListener("scroll", scheduleMark, { passive: true });
+    window.addEventListener("resize", scheduleMark);
+    window.addEventListener("load", scheduleMark);
+    if ("ResizeObserver" in window) new ResizeObserver(scheduleMark).observe(topbar);
+    mark();
   }
 
   // ---- "More samples": a button reveals a hidden grid of further episodes; the lazy loader picks the videos up

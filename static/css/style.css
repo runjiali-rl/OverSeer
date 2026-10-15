@@ -83,13 +83,12 @@ h3 { font-size: 1.1rem; margin-top: 1.2em; color: var(--ink-2); font-weight: 500
   height: var(--topbar-h); padding: 0 var(--gutter);
   display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
 }
-.topbar .brand { font-weight: 600; letter-spacing: -0.01em; color: var(--accent); text-decoration: none; font-size: 1.05rem; }
-.nav-links { display: flex; gap: 1.3rem; overflow-x: auto; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 88%, transparent 100%); mask-image: linear-gradient(to right, #000 88%, transparent 100%); }
-.nav-links::-webkit-scrollbar { display: none; }
-.nav-links a { color: var(--ink-2); text-decoration: none; font-size: 0.92rem; white-space: nowrap; transition: color 0.15s ease; }
+.topbar .brand { flex: none; font-weight: 600; letter-spacing: -0.01em; color: var(--accent); text-decoration: none; font-size: 1.05rem; }
+.nav-links { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0 1.3rem; min-width: 0; }
+.nav-links a { padding: 0.4rem 0; color: var(--ink-2); text-decoration: none; font-size: 0.92rem; font-weight: 500; white-space: nowrap; transition: color 0.15s ease; }
 .nav-links a:hover, .nav-links a.active { color: var(--ink); }
-.nav-links a.active { font-weight: 600; }
-html { scroll-padding-top: calc(var(--topbar-h) + 12px); }
+.nav-links a.active { color: var(--accent); text-decoration: underline; text-underline-offset: 5px; }
+html { scroll-padding-top: calc(var(--topbar-offset, var(--topbar-h)) + 12px); }
 
 /* ---- hero */
 .hero {
@@ -203,7 +202,9 @@ footer a:hover { color: var(--accent); }
   .container.wide { --gutter: 16px; }
   h1 { font-size: 1.65rem; }
   .hero .title { font-size: 1.85rem; }
+  .topbar-inner { height: auto; min-height: var(--topbar-h); flex-direction: column; gap: 0; padding-top: 6px; padding-bottom: 6px; }
   .topbar .brand { font-size: 0.98rem; }
+  .nav-links { width: 100%; justify-content: center; gap: 0 0.5rem; }
   .nav-links a { font-size: 0.86rem; }
   .container.main { padding-top: 2.4rem; padding-bottom: 1.6rem; }
   .grid-4 { grid-template-columns: repeat(2, 1fr); gap: 0.6rem; }
